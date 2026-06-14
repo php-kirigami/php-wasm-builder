@@ -31,4 +31,12 @@ packages/playground/website/demos/* export-ignore
 
 * text=auto
 *.sh text eol=lf
+*.patch text eol=lf
+*.mjs text eol=lf
+*.js text eol=lf
+*.ts text eol=lf
+*.c text eol=lf
+*.h text eol=lf
 Dockerfile text eol=lf
+Makefile text eol=lf
+*.bat text eol=crlf
