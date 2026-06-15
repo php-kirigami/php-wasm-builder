@@ -2407,10 +2407,7 @@ RUN cat /root/.exported-functions | grep -n "FS" || true
 RUN sed -i '/^$/d' /root/.exported-functions && \
     sed -i 's/\r//g' /root/.exported-functions && \
     tr -d '\r' < /root/.JS_ABI_EXPORTS > /tmp/exports_clean && \
-    mv /tmp/exports_clean /root/.JS_ABI_EXPORTS && \
-    # Retirer les exports avec des noms invalides (contenant espace ou newline)
-    grep -v '"FS' /root/.exported-functions > /tmp/ef_clean && \
-    mv /tmp/ef_clean /root/.exported-functions || true
+    mv /tmp/exports_clean /root/.JS_ABI_EXPORTS
 
 
 RUN cat > /root/jit_stubs.c << 'EOF'
