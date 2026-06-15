@@ -40,3 +40,4 @@ packages/playground/website/demos/* export-ignore
 Dockerfile text eol=lf
 Makefile text eol=lf
 *.bat text eol=crlf
+*.la text eol=lf
