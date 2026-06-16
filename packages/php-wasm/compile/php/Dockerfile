@@ -385,7 +385,7 @@ RUN source /root/emsdk/emsdk_env.sh && \
 	# See https://github.com/WordPress/wordpress-playground/issues/92
 	# for more context.
 	--disable-fiber-asm \
-	--enable-phar \
+	--disable-phar \
 	# --enable-json for PHP < 8.0:
 	--enable-json      \
 	--enable-embed=static \
@@ -396,7 +396,7 @@ RUN source /root/emsdk/emsdk_env.sh && \
 	--enable-hash      \
 	--enable-static    \
 	--enable-shared    \
-	--enable-session   \
+	--disable-session   \
 	--enable-filter    \
 	--enable-calendar  \
 	--disable-rpath    \
