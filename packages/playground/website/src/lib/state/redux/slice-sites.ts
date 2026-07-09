@@ -7,6 +7,7 @@ import {
 import type { PlaygroundDispatch, PlaygroundReduxState } from './store';
 import { selectActiveSite, setActiveSite } from './store';
 import { opfsSiteStorage } from '../opfs/opfs-site-storage';
+import type { OriginalUrlParams } from '../original-url-params';
 import {
 	BlueprintReflection,
 	type RuntimeConfiguration,
@@ -67,10 +68,7 @@ const DEFAULT_BLUEPRINT =
 export interface SiteInfo {
 	slug: string;
 	loadedFromStorage?: boolean;
-	originalUrlParams?: {
-		searchParams?: Record<string, string | string[]>;
-		hash?: string;
-	};
+	originalUrlParams?: OriginalUrlParams;
 	metadata: SiteMetadata;
 }
 
@@ -238,19 +236,42 @@ export function updateSite({
 		if ('storage' in changes) {
 			throw new Error('Cannot update storage for a site.');
 		}
+		const existingSite = selectSiteBySlug(getState(), slug);
+		if (!existingSite) {
+			throw new Error(`Site not found: ${slug}`);
+		}
+		const { metadata, ...topLevelChanges } = changes;
+		const updatedSite = {
+			...existingSite,
+			...topLevelChanges,
+			metadata: metadata
+				? {
+						...existingSite.metadata,
+						...metadata,
+					}
+				: existingSite.metadata,
+		};
+		if (updatedSite.metadata.storage !== 'none') {
+			if (!opfsSiteStorage) {
+				throw new Error(
+					'Cannot update a saved Playground because browser storage is not available.'
+				);
+			}
+			await opfsSiteStorage.update(
+				updatedSite.slug,
+				updatedSite.metadata,
+				updatedSite.originalUrlParams
+			);
+		}
 		dispatch(
 			sitesSlice.actions.updateSite({
 				id: slug,
-				changes,
+				changes: {
+					...topLevelChanges,
+					...(metadata ? { metadata: updatedSite.metadata } : {}),
+				},
 			})
 		);
-		const updatedSite = selectSiteBySlug(getState(), slug);
-		if (updatedSite.metadata.storage !== 'none') {
-			await opfsSiteStorage?.update(
-				updatedSite.slug,
-				updatedSite.metadata
-			);
-		}
 	};
 }
 
@@ -277,7 +298,11 @@ export function addSite(siteInfo: SiteInfo) {
 				'Cannot add a saved Playground because browser storage is not available.'
 			);
 		}
-		await opfsSiteStorage.create(siteInfo.slug, siteInfo.metadata);
+		await opfsSiteStorage.create(
+			siteInfo.slug,
+			siteInfo.metadata,
+			siteInfo.originalUrlParams
+		);
 		dispatch(sitesSlice.actions.addSite(siteInfo));
 	};
 }
