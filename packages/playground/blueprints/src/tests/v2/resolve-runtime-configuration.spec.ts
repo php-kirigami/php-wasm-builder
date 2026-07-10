@@ -10,7 +10,7 @@ describe('Blueprint v2 runtime configuration', () => {
 		phpVersion: RecommendedPHPVersion,
 		wpVersion: 'latest',
 		intl: false,
-		networking: true,
+		networking: false,
 		constants: {},
 		extraLibraries: [],
 	};
@@ -63,7 +63,7 @@ describe('Blueprint v2 runtime configuration', () => {
 		});
 	});
 
-	it('uses the default networking value when network access is omitted', async () => {
+	it('disables networking by default when network access is omitted', async () => {
 		await expect(
 			resolveRuntimeConfiguration({
 				version: 2,
@@ -72,7 +72,7 @@ describe('Blueprint v2 runtime configuration', () => {
 				},
 			})
 		).resolves.toMatchObject({
-			networking: true,
+			networking: false,
 		});
 	});
 
@@ -239,6 +239,20 @@ describe('Blueprint v2 runtime configuration', () => {
 		});
 	});
 
+	it('resolves the latest WordPress version matching constraints', async () => {
+		await expect(
+			resolveRuntimeConfiguration({
+				version: 2,
+				wordpressVersion: {
+					min: '6.7',
+					max: '6.8',
+				},
+			})
+		).resolves.toMatchObject({
+			wpVersion: '6.8',
+		});
+	});
+
 	it('uses the default WordPress version for constraints without a preferred version', async () => {
 		await expect(
 			resolveRuntimeConfiguration({
@@ -250,6 +264,92 @@ describe('Blueprint v2 runtime configuration', () => {
 		).resolves.toMatchObject({
 			wpVersion: 'latest',
 		});
+	});
+
+	it('rejects preferred WordPress versions outside constraints', async () => {
+		await expect(
+			resolveRuntimeConfiguration({
+				version: 2,
+				wordpressVersion: {
+					min: '6.8',
+					max: '6.8',
+					preferred: '6.9',
+				},
+			})
+		).rejects.toThrow(
+			'Blueprint v2 preferred WordPress version "6.9" does not satisfy constraints'
+		);
+	});
+
+	it('rejects unsatisfied WordPress version constraints', async () => {
+		await expect(
+			resolveRuntimeConfiguration({
+				version: 2,
+				wordpressVersion: {
+					min: '6.9',
+					max: '6.8',
+				},
+			})
+		).rejects.toThrow(
+			'Unsatisfiable Blueprint v2 WordPress version constraints {"min":"6.9","max":"6.8"}.'
+		);
+	});
+
+	it('uses WordPress ZIP URLs as custom runtime sources', async () => {
+		for (const wordpressVersion of [
+			'https://example.com/wordpress.zip',
+			'http://example.com/wordpress.zip',
+		] as const) {
+			await expect(
+				resolveRuntimeConfiguration({
+					version: 2,
+					wordpressVersion,
+				})
+			).resolves.toMatchObject({
+				wpVersion: wordpressVersion,
+			});
+		}
+	});
+
+	it('rejects unsupported WordPress runtime data references', async () => {
+		for (const wordpressVersion of [
+			'./wordpress.zip',
+			'../wordpress.zip',
+		]) {
+			await expect(
+				resolveRuntimeConfiguration({
+					version: 2,
+					wordpressVersion,
+				} as BlueprintV2Declaration)
+			).rejects.toThrow(
+				'Unsupported Blueprint v2 wordpressVersion file reference.'
+			);
+		}
+
+		await expect(
+			resolveRuntimeConfiguration({
+				version: 2,
+				wordpressVersion: {
+					filename: 'wordpress.zip',
+					content: '',
+				},
+			} as unknown as BlueprintV2Declaration)
+		).rejects.toThrow(
+			'Unsupported Blueprint v2 wordpressVersion data reference.'
+		);
+	});
+
+	it('rejects malformed WordPress version constraint values', async () => {
+		await expect(
+			resolveRuntimeConfiguration({
+				version: 2,
+				wordpressVersion: {
+					min: 123,
+				},
+			} as unknown as BlueprintV2Declaration)
+		).rejects.toThrow(
+			'Unsupported Blueprint v2 WordPress version constraint wordpressVersion.min 123.'
+		);
 	});
 
 	it('rejects unsupported WordPress version strings', async () => {

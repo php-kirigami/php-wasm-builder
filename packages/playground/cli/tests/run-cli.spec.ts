@@ -286,47 +286,39 @@ describe.each(blueprintVersions)(
 			}
 		});
 
-		test('should reject URL WordPress sources with the experimental v2 flag', async () => {
+		test('should accept URL WordPress sources with the experimental v2 flag', async () => {
 			const fetchMock = vi.fn(async () => {
 				throw new Error('Unexpected WordPress ZIP fetch');
 			});
 			vi.stubGlobal('fetch', fetchMock);
-			const stdoutChunks: string[] = [];
-			const stdoutSpy = vi
-				.spyOn(process.stdout, 'write')
-				.mockImplementation((chunk: any) => {
-					stdoutChunks.push(
-						typeof chunk === 'string'
-							? chunk
-							: new TextDecoder().decode(chunk)
-					);
-					return true;
-				});
-			const exitSpy = vi
-				.spyOn(process, 'exit')
-				.mockImplementation((code?: number | string | null) => {
-					throw new Error(`process.exit(${code})`);
-				});
+			const exitSpy = vi.spyOn(process, 'exit').mockImplementation(((
+				code?: number | string | null
+			) => {
+				throw new Error(
+					`process.exit unexpectedly called with "${code}"`
+				);
+			}) as any);
 
 			try {
-				await expect(
-					parseOptionsAndRunCLI([
-						'server',
-						'--experimental-blueprints-v2-runner',
-						'--wordpress-install-mode=install-from-existing-files-if-needed',
-						'--wp=https://example.com/wordpress.zip',
-						'--skip-sqlite-setup',
-						'--verbosity=quiet',
-						'--port=0',
-					])
-				).rejects.toThrow('process.exit(1)');
-				expect(stdoutChunks.join('')).toContain(
-					'Unsupported Blueprint v2 WordPress version "https://example.com/wordpress.zip".'
-				);
-				expect(exitSpy).toHaveBeenCalledWith(1);
+				await using cliResult = await parseOptionsAndRunCLI([
+					'server',
+					'--experimental-blueprints-v2-runner',
+					'--mode=mount-only',
+					'--wp=https://example.com/wordpress.zip',
+					'--verbosity=quiet',
+					'--port=0',
+					'--workers=1',
+				]);
+				const cliServer = cliResult[internalsKeyForTesting].cliServer;
+
+				expect(
+					await cliServer.playground.fileExists(
+						'/wordpress/wp-load.php'
+					)
+				).toBe(false);
+				expect(exitSpy).not.toHaveBeenCalled();
 				expect(fetchMock).not.toHaveBeenCalled();
 			} finally {
-				stdoutSpy.mockRestore();
 				exitSpy.mockRestore();
 				vi.unstubAllGlobals();
 			}
@@ -1048,6 +1040,37 @@ describe.each(blueprintVersions)(
 	},
 	60_000 * 5
 );
+
+test('should execute v2 blueprints through the CLI server', async () => {
+	await using cliServer = await runCLI({
+		command: 'server',
+		workers: 1,
+		blueprint: {
+			version: 2,
+			siteOptions: {
+				blogname: 'V2 CLI Smoke',
+			},
+			additionalStepsAfterExecution: [
+				{
+					step: 'writeFiles',
+					files: {
+						'site:v2-cli-smoke.php': {
+							filename: 'v2-cli-smoke.php',
+							content:
+								'<?php require __DIR__ . "/wp-load.php"; echo get_option("blogname");',
+						},
+					},
+				},
+			],
+		},
+	});
+	const response = await fetch(
+		new URL('/v2-cli-smoke.php', cliServer.serverUrl)
+	);
+
+	expect(response.status).toBe(200);
+	expect(await response.text()).toBe('V2 CLI Smoke');
+}, 120000);
 
 describe('native Blueprint v2 modes', () => {
 	fullNativeBlueprintV2ModeTest(
