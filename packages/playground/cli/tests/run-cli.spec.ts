@@ -256,7 +256,7 @@ describe.each(blueprintVersions)(
 			).resolves.toBe(true);
 		});
 
-		test('should accept --mode with the experimental v2 flag when legacy options are omitted', async () => {
+		test('should accept --mode with auto-mount disabled and no experimental flag', async () => {
 			const exitSpy = vi.spyOn(process, 'exit').mockImplementation(((
 				code?: number | string | null
 			) => {
@@ -268,8 +268,8 @@ describe.each(blueprintVersions)(
 			try {
 				await using cliResult = await parseOptionsAndRunCLI([
 					'server',
-					'--experimental-blueprints-v2-runner',
 					'--mode=mount-only',
+					'--no-auto-mount',
 					'--verbosity=quiet',
 					'--port=0',
 					'--workers=1',
@@ -286,7 +286,35 @@ describe.each(blueprintVersions)(
 			}
 		});
 
-		test('should accept URL WordPress sources with the experimental v2 flag', async () => {
+		test('should reject the retired experimental v2 flag', async () => {
+			const exitSpy = vi
+				.spyOn(process, 'exit')
+				.mockImplementation((() => undefined) as any);
+			// The yargs exit is caught by parseOptionsAndRunCLI(), which exits
+			// again. Throw only once so the outer exit can return to the test.
+			exitSpy.mockImplementationOnce((() => {
+				throw new Error('Stop after the yargs failure');
+			}) as any);
+			const consoleErrorSpy = vi
+				.spyOn(console, 'error')
+				.mockImplementation(() => {});
+
+			try {
+				await parseOptionsAndRunCLI([
+					'server',
+					'--experimental-blueprints-v2-runner',
+				]);
+				expect(exitSpy).toHaveBeenCalledWith(1);
+				expect(consoleErrorSpy).toHaveBeenCalledWith(
+					expect.stringContaining('experimental-blueprints-v2-runner')
+				);
+			} finally {
+				consoleErrorSpy.mockRestore();
+				exitSpy.mockRestore();
+			}
+		});
+
+		test('should accept URL WordPress sources with --mode', async () => {
 			const fetchMock = vi.fn(async () => {
 				throw new Error('Unexpected WordPress ZIP fetch');
 			});
@@ -302,7 +330,6 @@ describe.each(blueprintVersions)(
 			try {
 				await using cliResult = await parseOptionsAndRunCLI([
 					'server',
-					'--experimental-blueprints-v2-runner',
 					'--mode=mount-only',
 					'--wp=https://example.com/wordpress.zip',
 					'--verbosity=quiet',
@@ -324,10 +351,13 @@ describe.each(blueprintVersions)(
 			}
 		});
 
-		test('should reject --mode without the experimental v2 flag', async () => {
+		test('should reject --mode with --wordpress-install-mode', async () => {
 			const consoleErrorSpy = vi
 				.spyOn(console, 'error')
 				.mockImplementation(() => {});
+			const stdoutSpy = vi
+				.spyOn(process.stdout, 'write')
+				.mockImplementation(() => true);
 			const exitSpy = vi
 				.spyOn(process, 'exit')
 				.mockImplementation((code?: number | string | null) => {
@@ -344,22 +374,26 @@ describe.each(blueprintVersions)(
 						'--port=0',
 					])
 				).rejects.toThrow('process.exit(1)');
-				expect(consoleErrorSpy).toHaveBeenCalledWith(
+				expect(stdoutSpy).toHaveBeenCalledWith(
 					expect.stringContaining(
-						'The --mode option requires the --experimentalBlueprintsV2Runner flag.'
+						'The --wordpress-install-mode option cannot be used with the --mode option.'
 					)
 				);
 				expect(exitSpy).toHaveBeenCalledWith(1);
 			} finally {
 				consoleErrorSpy.mockRestore();
+				stdoutSpy.mockRestore();
 				exitSpy.mockRestore();
 			}
 		});
 
-		test('should reject --mode with SQLite setup disabled in experimental v2 mode', async () => {
+		test('should reject --mode with SQLite setup disabled', async () => {
 			const consoleErrorSpy = vi
 				.spyOn(console, 'error')
 				.mockImplementation(() => {});
+			const stdoutSpy = vi
+				.spyOn(process.stdout, 'write')
+				.mockImplementation(() => true);
 			const exitSpy = vi
 				.spyOn(process, 'exit')
 				.mockImplementation((code?: number | string | null) => {
@@ -370,14 +404,13 @@ describe.each(blueprintVersions)(
 				await expect(
 					parseOptionsAndRunCLI([
 						'server',
-						'--experimental-blueprints-v2-runner',
 						'--mode=mount-only',
 						'--skip-sqlite-setup',
 						'--verbosity=quiet',
 						'--port=0',
 					])
 				).rejects.toThrow('process.exit(1)');
-				expect(consoleErrorSpy).toHaveBeenCalledWith(
+				expect(stdoutSpy).toHaveBeenCalledWith(
 					expect.stringContaining(
 						'The --skipSqliteSetup option is not supported in Blueprint V2 mode.'
 					)
@@ -385,14 +418,18 @@ describe.each(blueprintVersions)(
 				expect(exitSpy).toHaveBeenCalledWith(1);
 			} finally {
 				consoleErrorSpy.mockRestore();
+				stdoutSpy.mockRestore();
 				exitSpy.mockRestore();
 			}
 		});
 
-		test('should reject --mode with auto-mount in experimental v2 mode', async () => {
+		test('should reject --mode with auto-mount', async () => {
 			const consoleErrorSpy = vi
 				.spyOn(console, 'error')
 				.mockImplementation(() => {});
+			const stdoutSpy = vi
+				.spyOn(process.stdout, 'write')
+				.mockImplementation(() => true);
 			const exitSpy = vi
 				.spyOn(process, 'exit')
 				.mockImplementation((code?: number | string | null) => {
@@ -403,14 +440,13 @@ describe.each(blueprintVersions)(
 				await expect(
 					parseOptionsAndRunCLI([
 						'server',
-						'--experimental-blueprints-v2-runner',
 						'--mode=mount-only',
 						'--auto-mount=.',
 						'--verbosity=quiet',
 						'--port=0',
 					])
 				).rejects.toThrow('process.exit(1)');
-				expect(consoleErrorSpy).toHaveBeenCalledWith(
+				expect(stdoutSpy).toHaveBeenCalledWith(
 					expect.stringContaining(
 						'The --mode option cannot be used with --auto-mount because --auto-mount automatically sets the mode.'
 					)
@@ -418,6 +454,7 @@ describe.each(blueprintVersions)(
 				expect(exitSpy).toHaveBeenCalledWith(1);
 			} finally {
 				consoleErrorSpy.mockRestore();
+				stdoutSpy.mockRestore();
 				exitSpy.mockRestore();
 			}
 		});
@@ -1083,7 +1120,6 @@ describe('native Blueprint v2 modes', () => {
 				await using cliServer = await runCLI({
 					command: 'server',
 					workers: 1,
-					'experimental-blueprints-v2-runner': true,
 					mode: 'create-new-site',
 					'mount-before-install': [
 						{
@@ -1116,7 +1152,6 @@ describe('native Blueprint v2 modes', () => {
 				await using cliServer = await runCLI({
 					command: 'server',
 					workers: 1,
-					'experimental-blueprints-v2-runner': true,
 					mode: 'create-new-site',
 					'mount-before-install': [
 						{
@@ -1138,7 +1173,6 @@ describe('native Blueprint v2 modes', () => {
 				await using existingSiteServer = await runCLI({
 					command: 'server',
 					workers: 1,
-					'experimental-blueprints-v2-runner': true,
 					mode: 'apply-to-existing-site',
 					'mount-before-install': [
 						{
