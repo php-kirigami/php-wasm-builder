@@ -61,6 +61,26 @@ jobs:
             - run: npx nx affected --target=typecheck
             - run: npx nx check-orphan-pages docs-site
             - run: bash tools/check-node-engine-alignment.sh
+
+    # Unit tests for the PR auto-labeling logic (packages/meta/src/pr-labels).
+    # These run with node:test, not nx: packages/meta is not an nx project, so
+    # `nx affected --target=test` never covers them. The suite is self-contained
+    # (one pinned dependency, no build) and runs in seconds, so it gets its own
+    # tiny job rather than a place in the nx matrix.
+    test-pr-labels:
+        name: 'Test PR auto-labeling'
+        if: github.repository == 'WordPress/wordpress-playground' || github.event_name == 'pull_request'
+        runs-on: ubuntu-latest
+        timeout-minutes: 10
+        permissions:
+            contents: read # Required to clone the repo.
+        steps:
+            - uses: actions/checkout@v4
+            - name: Install label matcher dependencies
+              run: npm ci --no-audit --no-fund --ignore-scripts --prefix packages/meta/src/pr-labels
+            - name: Run PR auto-labeling unit tests
+              run: node --test packages/meta/src/pr-labels/*.test.mjs
+
     test-unit-asyncify:
         needs: set-nx-shas
         if: github.repository == 'WordPress/wordpress-playground' || github.event_name == 'pull_request'
@@ -558,7 +578,7 @@ jobs:
 
                   git fetch --no-tags --depth=1 origin "$base_sha"
 
-                  if git diff --name-only "$base_sha" "$GITHUB_SHA" -- packages/php-wasm/compile-extension/ | grep -q .; then
+                  if git diff --name-only "$base_sha" "$GITHUB_SHA" -- packages/php-wasm/compile-extension/ packages/php-wasm/compile/php/ | grep -q .; then
                     echo "changed=true" >> "$GITHUB_OUTPUT"
                   else
                     echo "changed=false" >> "$GITHUB_OUTPUT"
@@ -603,6 +623,8 @@ jobs:
               run: node --expose-gc node_modules/nx/bin/nx run php-wasm-compile-extension:test-lazy-docker-asset-fetch --output-style=stream
             - name: Build and load PHP.wasm extension fixtures
               run: node --expose-gc node_modules/nx/bin/nx affected --target=test-compile-extension-integration --parallel=1 --output-style=stream
+            - name: Load external extension against freshly built PHP 8.5 JSPI runtime
+              run: node --expose-gc node_modules/nx/bin/nx run php-wasm-compile-extension:test-external-extension-abi --output-style=stream
 
     test-legacy-wp-version-boot:
         if: github.repository == 'WordPress/wordpress-playground' || github.event_name == 'pull_request'
